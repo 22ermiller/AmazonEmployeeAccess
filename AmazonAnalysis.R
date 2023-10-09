@@ -39,3 +39,25 @@ my_recipe <- recipe(ACTION~., data=amazon_train) %>%
 prep <- prep(my_recipe)
 baked <- bake(prep, new_data = amazon_train)
 
+
+# Logistic Regression -----------------------------------------------------
+
+log_mod <- logistic_reg() %>%
+  set_engine("glm")
+
+amazon_workflow <- workflow() %>%
+  add_recipe(my_recipe) %>%
+  add_model(log_mod) %>%
+  fit(data = amazon_train)
+
+log_preds <- predict(amazon_workflow,
+                     new_data = amazon_test,
+                     type = "prob")
+
+final_log_preds <- tibble(id = amazon_test$id,
+                          ACTION = log_preds$.pred_1)
+
+write_csv(final_log_preds, "logistic_predictions.csv")
+
+ggplot(data = log_preds) +
+  + geom_histogram(aes(x = ACTION)) # Histogram of predictions
