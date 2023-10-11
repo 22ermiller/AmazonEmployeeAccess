@@ -33,8 +33,9 @@ ggplot(data=amazon_train) +
 
 my_recipe <- recipe(ACTION~., data=amazon_train) %>%
   step_mutate_at(all_numeric_predictors(), fn = factor) %>%
-  step_other(all_nominal_predictors(), threshold = .01) %>%
-  step_dummy(all_nominal_predictors())
+  step_other(all_nominal_predictors(), threshold = .001) %>%
+  step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION))
+  #step_dummy(all_nominal_predictors())
 
 prep <- prep(my_recipe)
 baked <- bake(prep, new_data = amazon_train)
@@ -42,7 +43,7 @@ baked <- bake(prep, new_data = amazon_train)
 
 # Logistic Regression -----------------------------------------------------
 
-log_mod <- logistic_reg() %>%
+log_mod <- logistic_reg() %>% # set logistic regression model
   set_engine("glm")
 
 amazon_workflow <- workflow() %>%
@@ -57,7 +58,51 @@ log_preds <- predict(amazon_workflow,
 final_log_preds <- tibble(id = amazon_test$id,
                           ACTION = log_preds$.pred_1)
 
-write_csv(final_log_preds, "logistic_predictions.csv")
+vroom_write(final_log_preds, "logistic_predictions.csv", delim = ",")
 
 ggplot(data = log_preds) +
   + geom_histogram(aes(x = ACTION)) # Histogram of predictions
+
+
+# Penalized Logistic Regression --------------------------------------------
+
+pen_mod <- logistic_reg(mixture=tune(),
+                        penalty = tune()) %>%
+  set_engine("glmnet")
+
+# set workflow
+pen_workflow <- workflow() %>%
+  add_recipe(my_recipe) %>%
+  add_model(pen_mod)
+
+## Grid of tuning values
+tuning_grid <- grid_regular(penalty(),
+                            mixture(),
+                            levels = 5)
+
+# split data into folds
+folds <- vfold_cv(amazon_train, v = 10, repeats = 1)
+
+# run Cross validation
+CV_results <- pen_workflow %>%
+  tune_grid(resamples = folds,
+            grid = tuning_grid,
+            metrics = metric_set(roc_auc))
+
+# find best parameters
+bestTune <- CV_results %>%
+  select_best("roc_auc")
+
+final_pen_workflow <- pen_workflow %>%
+  finalize_workflow(bestTune) %>%
+  fit(data = amazon_train)
+
+# predict
+pen_preds <- predict(final_pen_workflow,
+                     new_data = amazon_test,
+                     type = "prob")
+
+final_pen_preds <- tibble(id = amazon_test$id,
+                          ACTION = pen_preds$.pred_1)
+
+vroom_write(final_pen_preds, "penalized_predictions.csv", delim = ",")
