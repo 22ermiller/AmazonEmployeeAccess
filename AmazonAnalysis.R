@@ -22,8 +22,7 @@ amazon_train %>%
   summarize(total = n(),
          YES = sum(ACTION == 1),
          NO = sum(ACTION == 0),
-         frac = YES/total) %>% View()
-
+         frac = YES/total)
 # mosaic plot
 ggplot(data=amazon_train) + 
   geom_mosaic(data = amazon_train, aes(x=product(ROLE_FAMILY), fill=ACTION))
@@ -59,10 +58,6 @@ final_log_preds <- tibble(id = amazon_test$id,
                           ACTION = log_preds$.pred_1)
 
 vroom_write(final_log_preds, "logistic_predictions.csv", delim = ",")
-
-ggplot(data = log_preds) +
-  + geom_histogram(aes(x = ACTION)) # Histogram of predictions
-
 
 # Penalized Logistic Regression --------------------------------------------
 
@@ -106,3 +101,4 @@ final_pen_preds <- tibble(id = amazon_test$id,
                           ACTION = pen_preds$.pred_1)
 
 vroom_write(final_pen_preds, "penalized_predictions.csv", delim = ",")
+

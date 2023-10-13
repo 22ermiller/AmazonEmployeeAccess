@@ -46,5 +46,160 @@ Type 'q()' to quit R.
 ✖ recipes::step()   masks stats::step()
 • Use tidymodels_prefer() to resolve common conflicts.
 > library(embed)
-Error in library(embed) : there is no package called ‘embed’
-Execution halted
+> library(vroom)
+
+Attaching package: ‘vroom’
+
+The following object is masked from ‘package:yardstick’:
+
+    spec
+
+The following object is masked from ‘package:scales’:
+
+    col_factor
+
+The following objects are masked from ‘package:readr’:
+
+    as.col_spec, col_character, col_date, col_datetime, col_double,
+    col_factor, col_guess, col_integer, col_logical, col_number,
+    col_skip, col_time, cols, cols_condense, cols_only, date_names,
+    date_names_lang, date_names_langs, default_locale, fwf_cols,
+    fwf_empty, fwf_positions, fwf_widths, locale, output_column,
+    problems, spec
+
+> library(ggmosaic)
+> 
+> ##Read In Data##
+> amazon_test <- vroom("test.csv")
+Rows: 58921 Columns: 10
+── Column specification ────────────────────────────────────────────────────────
+Delimiter: ","
+dbl (10): id, RESOURCE, MGR_ID, ROLE_ROLLUP_1, ROLE_ROLLUP_2, ROLE_DEPTNAME,...
+
+ℹ Use `spec()` to retrieve the full column specification for this data.
+ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+> amazon_train <- vroom("train.csv")  %>%
++   mutate(ACTION = as.factor(ACTION))
+Rows: 32769 Columns: 10
+── Column specification ────────────────────────────────────────────────────────
+Delimiter: ","
+dbl (10): ACTION, RESOURCE, MGR_ID, ROLE_ROLLUP_1, ROLE_ROLLUP_2, ROLE_DEPTN...
+
+ℹ Use `spec()` to retrieve the full column specification for this data.
+ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+> 
+> ## EDA
+> 
+> # box plot
+> ggplot(amazon_train) +
++   geom_boxplot(aes(x = ACTION, y = ROLE_TITLE))
+> 
+> # counts
+> amazon_train %>%
++   group_by(ROLE_FAMILY) %>%
++   summarize(total = n(),
++          YES = sum(ACTION == 1),
++          NO = sum(ACTION == 0),
++          frac = YES/total)
+# A tibble: 67 × 5
+   ROLE_FAMILY total   YES    NO  frac
+         <dbl> <int> <int> <int> <dbl>
+ 1        3130   146   141     5 0.966
+ 2        4673   384   332    52 0.865
+ 3        6725    98    97     1 0.990
+ 4       19721  2636  2393   243 0.908
+ 5       19793   362   303    59 0.837
+ 6      117887  2400  2302    98 0.959
+ 7      118131   160   137    23 0.856
+ 8      118205   449   423    26 0.942
+ 9      118295   493   469    24 0.951
+10      118331   892   841    51 0.943
+# ℹ 57 more rows
+> # mosaic plot
+> ggplot(data=amazon_train) + 
++   geom_mosaic(data = amazon_train, aes(x=product(ROLE_FAMILY), fill=ACTION))
+Warning message:
+`unite_()` was deprecated in tidyr 1.2.0.
+ℹ Please use `unite()` instead.
+ℹ The deprecated feature was likely used in the ggmosaic package.
+  Please report the issue at <https://github.com/haleyjeppson/ggmosaic>. 
+> 
+> 
+> ## Create Recipe
+> 
+> my_recipe <- recipe(ACTION~., data=amazon_train) %>%
++   step_mutate_at(all_numeric_predictors(), fn = factor) %>%
++   step_other(all_nominal_predictors(), threshold = .001) %>%
++   step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION))
+>   #step_dummy(all_nominal_predictors())
+> 
+> prep <- prep(my_recipe)
+> baked <- bake(prep, new_data = amazon_train)
+> 
+> 
+> # Logistic Regression -----------------------------------------------------
+> 
+> log_mod <- logistic_reg() %>% # set logistic regression model
++   set_engine("glm")
+> 
+> amazon_workflow <- workflow() %>%
++   add_recipe(my_recipe) %>%
++   add_model(log_mod) %>%
++   fit(data = amazon_train)
+> 
+> log_preds <- predict(amazon_workflow,
++                      new_data = amazon_test,
++                      type = "prob")
+> 
+> final_log_preds <- tibble(id = amazon_test$id,
++                           ACTION = log_preds$.pred_1)
+> 
+> vroom_write(final_log_preds, "logistic_predictions.csv", delim = ",")
+> 
+> # Penalized Logistic Regression --------------------------------------------
+> 
+> pen_mod <- logistic_reg(mixture=tune(),
++                         penalty = tune()) %>%
++   set_engine("glmnet")
+> 
+> # set workflow
+> pen_workflow <- workflow() %>%
++   add_recipe(my_recipe) %>%
++   add_model(pen_mod)
+> 
+> ## Grid of tuning values
+> tuning_grid <- grid_regular(penalty(),
++                             mixture(),
++                             levels = 5)
+> 
+> # split data into folds
+> folds <- vfold_cv(amazon_train, v = 10, repeats = 1)
+> 
+> # run Cross validation
+> CV_results <- pen_workflow %>%
++   tune_grid(resamples = folds,
++             grid = tuning_grid,
++             metrics = metric_set(roc_auc))
+> 
+> # find best parameters
+> bestTune <- CV_results %>%
++   select_best("roc_auc")
+> 
+> final_pen_workflow <- pen_workflow %>%
++   finalize_workflow(bestTune) %>%
++   fit(data = amazon_train)
+> 
+> # predict
+> pen_preds <- predict(final_pen_workflow,
++                      new_data = amazon_test,
++                      type = "prob")
+> 
+> final_pen_preds <- tibble(id = amazon_test$id,
++                           ACTION = pen_preds$.pred_1)
+> 
+> vroom_write(final_pen_preds, "penalized_predictions.csv", delim = ",")
+> 
+> 
+> proc.time()
+   user  system elapsed 
+577.679   2.787 274.669 
