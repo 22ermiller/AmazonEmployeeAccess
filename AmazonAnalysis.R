@@ -4,6 +4,7 @@ library(tidymodels)
 library(embed)
 library(vroom)
 library(ggmosaic)
+library(doParallel)
 
 ##Read In Data##
 amazon_test <- vroom("test.csv")
@@ -101,4 +102,60 @@ final_pen_preds <- tibble(id = amazon_test$id,
                           ACTION = pen_preds$.pred_1)
 
 vroom_write(final_pen_preds, "penalized_predictions.csv", delim = ",")
+
+
+# Random Forest -----------------------------------------------------------
+
+forest_mod <- rand_forest(mtry = tune(),
+                          min_n = tune(),
+                          trees = 500) %>%
+  set_engine("ranger") %>%
+  set_mode("classification")
+
+# set workflow
+forest_workflow <- workflow() %>%
+  add_recipe(my_recipe) %>%
+  add_model(forest_mod)
+
+## Grid of tuning values
+tuning_grid <- grid_regular(mtry(range = c(1,10)),
+                            min_n(),
+                            levels = 5)
+
+# split data into folds
+folds <- vfold_cv(amazon_train, v = 10, repeats = 1)
+
+# Parallel Processing
+num_cores <- parallel::detectCores()
+cl <- makePSOCKcluster(num_cores)
+registerDoParallel(cl)
+
+# run Cross validation
+CV_results <- forest_workflow %>%
+  tune_grid(resamples = folds,
+            grid = tuning_grid,
+            metrics = metric_set(roc_auc))
+
+# find best parameters
+bestTune <- CV_results %>%
+  select_best("roc_auc")
+
+final_forest_workflow <- forest_workflow %>%
+  finalize_workflow(bestTune) %>%
+  fit(data = amazon_train)
+
+# predict
+forest_preds <- predict(final_forest_workflow,
+                     new_data = amazon_test,
+                     type = "prob")
+
+final_forest_preds <- tibble(id = amazon_test$id,
+                          ACTION = forest_preds$.pred_1)
+
+stopCluster(cl)
+
+vroom_write(final_forest_preds, "forest_predictions.csv", delim = ",")
+
+
+
 
