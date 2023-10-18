@@ -5,6 +5,7 @@ library(embed)
 library(vroom)
 library(ggmosaic)
 library(doParallel)
+library(discrim) # for naive bayes
 
 ##Read In Data##
 amazon_test <- vroom("test.csv")
@@ -155,6 +156,52 @@ final_forest_preds <- tibble(id = amazon_test$id,
 stopCluster(cl)
 
 vroom_write(final_forest_preds, "forest_predictions.csv", delim = ",")
+
+
+# Naive Bayes -------------------------------------------------------------
+
+nb_model <- naive_Bayes(Laplace = tune(), 
+                        smoothness = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("naivebayes")
+
+nb_workflow <- workflow() %>%
+  add_recipe(my_recipe) %>%
+  add_model(nb_model)
+
+## Tune 
+
+## Grid of tuning values
+tuning_grid <- grid_regular(Laplace(),
+                            smoothness(),
+                            levels = 5)
+
+# split data into folds
+folds <- vfold_cv(amazon_train, v = 10, repeats = 1)
+
+# run Cross validation
+CV_results <- nb_workflow %>%
+  tune_grid(resamples = folds,
+            grid = tuning_grid,
+            metrics = metric_set(roc_auc))
+
+# find best parameters
+bestTune <- CV_results %>%
+  select_best("roc_auc")
+
+final_nb_workflow <- nb_workflow %>%
+  finalize_workflow(bestTune) %>%
+  fit(data = amazon_train)
+
+# predict
+nb_preds <- predict(final_nb_workflow,
+                        new_data = amazon_test,
+                        type = "prob")
+
+final_nb_preds <- tibble(id = amazon_test$id,
+                             ACTION = nb_preds$.pred_1)
+
+vroom_write(final_nb_preds, "nb_predictions.csv", delim = ",")
 
 
 
