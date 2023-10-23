@@ -38,7 +38,14 @@ my_recipe <- recipe(ACTION~., data=amazon_train) %>%
   step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION))
   #step_dummy(all_nominal_predictors())
 
-prep <- prep(my_recipe)
+pca_recipe <- recipe(ACTION~., data=amazon_train) %>%
+  step_mutate_at(all_numeric_predictors(), fn = factor) %>%
+  step_other(all_nominal_predictors(), threshold = .001) %>%
+  step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION)) %>%
+  step_normalize(all_predictors()) %>%
+  step_pca(all_predictors(), threshold = .9)
+
+prep <- prep(pca_recipe)
 baked <- bake(prep, new_data = amazon_train)
 
 
@@ -166,7 +173,7 @@ nb_model <- naive_Bayes(Laplace = tune(),
   set_engine("naivebayes")
 
 nb_workflow <- workflow() %>%
-  add_recipe(my_recipe) %>%
+  add_recipe(pca_recipe) %>%
   add_model(nb_model)
 
 ## Tune 
@@ -202,6 +209,58 @@ final_nb_preds <- tibble(id = amazon_test$id,
                              ACTION = nb_preds$.pred_1)
 
 vroom_write(final_nb_preds, "nb_predictions.csv", delim = ",")
+
+
+
+# K-Nearest Neighbors -----------------------------------------------------
+
+knn_recipe <- recipe(ACTION~., data=amazon_train) %>%
+  step_mutate_at(all_numeric_predictors(), fn = factor) %>%
+  step_other(all_nominal_predictors(), threshold = .001) %>%
+  step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION)) %>%
+  step_normalize(all_numeric_predictors())
+
+knn_model <- nearest_neighbor(neighbors = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("kknn")
+
+knn_wf <- workflow() %>%
+  add_recipe(pca_recipe) %>%
+  add_model(knn_model)
+
+## Tune 
+
+## Grid of tuning values
+tuning_grid <- grid_regular(neighbors(),
+                            levels = 5)
+
+# split data into folds
+folds <- vfold_cv(amazon_train, v = 10, repeats = 1)
+
+# run Cross validation
+CV_results <- knn_wf %>%
+  tune_grid(resamples = folds,
+            grid = tuning_grid,
+            metrics = metric_set(roc_auc))
+
+# find best parameters
+bestTune <- CV_results %>%
+  select_best("roc_auc")
+
+final_knn_workflow <- knn_wf %>%
+  finalize_workflow(bestTune) %>%
+  fit(data = amazon_train)
+
+# predict
+knn_preds <- predict(final_knn_workflow,
+                    new_data = amazon_test,
+                    type = "prob")
+
+final_knn_preds <- tibble(id = amazon_test$id,
+                         ACTION = knn_preds$.pred_1)
+
+vroom_write(final_knn_preds, "knn_predictions.csv", delim = ",")
+
 
 
 
