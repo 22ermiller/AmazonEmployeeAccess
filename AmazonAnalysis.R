@@ -262,6 +262,65 @@ final_knn_preds <- tibble(id = amazon_test$id,
 vroom_write(final_knn_preds, "knn_predictions.csv", delim = ",")
 
 
+# Support Vector Machines -------------------------------------------------
+
+# Polynomial SVM
+svmPoly <- svm_poly(degree=tune(), cost=tune()) %>%
+  set_mode("classification") %>%
+  set_engine("kernlab")
+
+# Radial SVM
+svmRadial <- svm_rbf(rbf_sigma = tune(), cost = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("kernlab")
+
+# Linear SVM
+svmLinear <- svm_linear(cost = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("kernlab")
 
 
+# Parallel Processing
+num_cores <- parallel::detectCores()
+cl <- makePSOCKcluster(num_cores)
+registerDoParallel(cl)
 
+svm_workflow <- workflow() %>%
+  add_recipe(pca_recipe) %>%
+  add_model(svmLinear)
+
+## Tune 
+
+## Grid of tuning values
+tuning_grid <- grid_regular(cost(),
+                            levels = 5)
+
+# split data into folds
+folds <- vfold_cv(amazon_train, v = 10, repeats = 1)
+
+# run Cross validation
+CV_results <- svm_workflow %>%
+  tune_grid(resamples = folds,
+            grid = tuning_grid,
+            metrics = metric_set(roc_auc))
+
+# find best parameters
+bestTune <- CV_results %>%
+  select_best("roc_auc")
+
+final_svm_workflow <- svm_workflow %>%
+  finalize_workflow(bestTune) %>%
+  fit(data = amazon_train)
+
+# predict
+svm_preds <- predict(final_svm_workflow,
+                     new_data = amazon_test,
+                     type = "prob")
+
+final_svm_preds <- tibble(id = amazon_test$id,
+                          ACTION = svm_preds$.pred_1)
+
+vroom_write(final_svm_preds, "svm_predictions.csv", delim = ",")
+
+
+stopCluster(cl)
