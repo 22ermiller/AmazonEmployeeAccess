@@ -1,0 +1,173 @@
+
+R version 4.3.1 (2023-06-16) -- "Beagle Scouts"
+Copyright (C) 2023 The R Foundation for Statistical Computing
+Platform: x86_64-pc-linux-gnu (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> ##Libraries##
+> library(tidyverse)
+── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
+✔ dplyr     1.1.3     ✔ readr     2.1.4
+✔ forcats   1.0.0     ✔ stringr   1.5.0
+✔ ggplot2   3.4.3     ✔ tibble    3.2.1
+✔ lubridate 1.9.3     ✔ tidyr     1.3.0
+✔ purrr     1.0.2     
+── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+✖ dplyr::filter() masks stats::filter()
+✖ dplyr::lag()    masks stats::lag()
+ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
+> library(tidymodels)
+── Attaching packages ────────────────────────────────────── tidymodels 1.1.1 ──
+✔ broom        1.0.5     ✔ rsample      1.2.0
+✔ dials        1.2.0     ✔ tune         1.1.2
+✔ infer        1.0.5     ✔ workflows    1.1.3
+✔ modeldata    1.2.0     ✔ workflowsets 1.0.1
+✔ parsnip      1.1.1     ✔ yardstick    1.2.0
+✔ recipes      1.0.8     
+── Conflicts ───────────────────────────────────────── tidymodels_conflicts() ──
+✖ scales::discard() masks purrr::discard()
+✖ dplyr::filter()   masks stats::filter()
+✖ recipes::fixed()  masks stringr::fixed()
+✖ dplyr::lag()      masks stats::lag()
+✖ yardstick::spec() masks readr::spec()
+✖ recipes::step()   masks stats::step()
+• Dig deeper into tidy modeling with R at https://www.tmwr.org
+> library(embed)
+> library(vroom)
+
+Attaching package: ‘vroom’
+
+The following object is masked from ‘package:yardstick’:
+
+    spec
+
+The following object is masked from ‘package:scales’:
+
+    col_factor
+
+The following objects are masked from ‘package:readr’:
+
+    as.col_spec, col_character, col_date, col_datetime, col_double,
+    col_factor, col_guess, col_integer, col_logical, col_number,
+    col_skip, col_time, cols, cols_condense, cols_only, date_names,
+    date_names_lang, date_names_langs, default_locale, fwf_cols,
+    fwf_empty, fwf_positions, fwf_widths, locale, output_column,
+    problems, spec
+
+> library(ggmosaic)
+> library(doParallel)
+Loading required package: foreach
+
+Attaching package: ‘foreach’
+
+The following objects are masked from ‘package:purrr’:
+
+    accumulate, when
+
+Loading required package: iterators
+Loading required package: parallel
+> library(discrim) # for naive bayes
+
+Attaching package: ‘discrim’
+
+The following object is masked from ‘package:dials’:
+
+    smoothness
+
+> 
+> ##Read In Data##
+> amazon_test <- vroom("test.csv")
+Rows: 58921 Columns: 10
+── Column specification ────────────────────────────────────────────────────────
+Delimiter: ","
+dbl (10): id, RESOURCE, MGR_ID, ROLE_ROLLUP_1, ROLE_ROLLUP_2, ROLE_DEPTNAME,...
+
+ℹ Use `spec()` to retrieve the full column specification for this data.
+ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+> amazon_train <- vroom("train.csv")  %>%
++   mutate(ACTION = as.factor(ACTION))
+Rows: 32769 Columns: 10
+── Column specification ────────────────────────────────────────────────────────
+Delimiter: ","
+dbl (10): ACTION, RESOURCE, MGR_ID, ROLE_ROLLUP_1, ROLE_ROLLUP_2, ROLE_DEPTN...
+
+ℹ Use `spec()` to retrieve the full column specification for this data.
+ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+> 
+> pca_recipe <- recipe(ACTION~., data=amazon_train) %>%
++   step_mutate_at(all_numeric_predictors(), fn = factor) %>%
++   step_other(all_nominal_predictors(), threshold = .001) %>%
++   step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION)) %>%
++   step_normalize(all_predictors()) %>%
++   step_pca(all_predictors(), threshold = .9)
+> 
+> 
+> # Polynomial SVM
+> svmPoly <- svm_poly(degree=tune(), cost=tune()) %>%
++   set_mode("classification") %>%
++   set_engine("kernlab")
+> 
+> # Radial SVM
+> svmRadial <- svm_rbf(rbf_sigma = tune(), cost = tune()) %>%
++   set_mode("classification") %>%
++   set_engine("kernlab")
+> 
+> # Linear SVM
+> svmLinear <- svm_linear(cost = tune()) %>%
++   set_mode("classification") %>%
++   set_engine("kernlab")
+> 
+> svm_workflow <- workflow() %>%
++   add_recipe(pca_recipe) %>%
++   add_model(svmLinear)
+> 
+> ## Tune 
+> 
+> ## Grid of tuning values
+> tuning_grid <- grid_regular(cost(),
++                             levels = 5)
+> 
+> # split data into folds
+> folds <- vfold_cv(amazon_train, v = 10, repeats = 1)
+> 
+> # run Cross validation
+> CV_results <- svm_workflow %>%
++   tune_grid(resamples = folds,
++             grid = tuning_grid,
++             metrics = metric_set(roc_auc))
+> 
+> # find best parameters
+> bestTune <- CV_results %>%
++   select_best("roc_auc")
+> 
+> final_svm_workflow <- svm_workflow %>%
++   finalize_workflow(bestTune) %>%
++   fit(data = amazon_train)
+ Setting default kernel parameters  
+> 
+> # predict
+> svm_preds <- predict(final_svm_workflow,
++                      new_data = amazon_test,
++                      type = "prob")
+> 
+> final_svm_preds <- tibble(id = amazon_test$id,
++                           ACTION = svm_preds$.pred_1)
+> 
+> vroom_write(final_svm_preds, "svm_predictions.csv", delim = ",")
+> 
+> proc.time()
+     user    system   elapsed 
+42261.481   288.562 43227.241 
