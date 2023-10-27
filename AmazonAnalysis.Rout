@@ -44,7 +44,7 @@ Type 'q()' to quit R.
 ✖ dplyr::lag()      masks stats::lag()
 ✖ yardstick::spec() masks readr::spec()
 ✖ recipes::step()   masks stats::step()
-• Use tidymodels_prefer() to resolve common conflicts.
+• Learn how to get started at https://www.tidymodels.org/start/
 > library(embed)
 > library(vroom)
 
@@ -68,6 +68,26 @@ The following objects are masked from ‘package:readr’:
     problems, spec
 
 > library(ggmosaic)
+> library(doParallel)
+Loading required package: foreach
+
+Attaching package: ‘foreach’
+
+The following objects are masked from ‘package:purrr’:
+
+    accumulate, when
+
+Loading required package: iterators
+Loading required package: parallel
+> library(discrim) # for naive bayes
+
+Attaching package: ‘discrim’
+
+The following object is masked from ‘package:dials’:
+
+    smoothness
+
+> library(themis) # for unbalanced data (smote, upsample, downsample)
 > 
 > ##Read In Data##
 > amazon_test <- vroom("test.csv")
@@ -133,7 +153,22 @@ Warning message:
 +   step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION))
 >   #step_dummy(all_nominal_predictors())
 > 
-> prep <- prep(my_recipe)
+> pca_recipe <- recipe(ACTION~., data=amazon_train) %>%
++   step_mutate_at(all_numeric_predictors(), fn = factor) %>%
++   step_other(all_nominal_predictors(), threshold = .001) %>%
++   step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION)) %>%
++   step_normalize(all_predictors()) %>%
++   step_pca(all_predictors(), threshold = .9)
+> 
+> balanced_recipe <- recipe(ACTION~., data=amazon_train) %>%
++   step_mutate_at(all_numeric_predictors(), fn = factor) %>%
++   step_other(all_nominal_predictors(), threshold = .001) %>%
++   step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION)) %>%
++   step_normalize(all_predictors()) %>%
++   step_pca(all_predictors(), threshold = .9) %>%
++   step_smote(all_outcomes(), neighbors = 5)
+> 
+> prep <- prep(pca_recipe)
 > baked <- bake(prep, new_data = amazon_train)
 > 
 > 
@@ -143,7 +178,7 @@ Warning message:
 +   set_engine("glm")
 > 
 > amazon_workflow <- workflow() %>%
-+   add_recipe(my_recipe) %>%
++   add_recipe(balanced_recipe) %>%
 +   add_model(log_mod) %>%
 +   fit(data = amazon_train)
 > 
@@ -164,7 +199,7 @@ Warning message:
 > 
 > # set workflow
 > pen_workflow <- workflow() %>%
-+   add_recipe(my_recipe) %>%
++   add_recipe(balanced_recipe) %>%
 +   add_model(pen_mod)
 > 
 > ## Grid of tuning values
@@ -180,26 +215,3 @@ Warning message:
 +   tune_grid(resamples = folds,
 +             grid = tuning_grid,
 +             metrics = metric_set(roc_auc))
-> 
-> # find best parameters
-> bestTune <- CV_results %>%
-+   select_best("roc_auc")
-> 
-> final_pen_workflow <- pen_workflow %>%
-+   finalize_workflow(bestTune) %>%
-+   fit(data = amazon_train)
-> 
-> # predict
-> pen_preds <- predict(final_pen_workflow,
-+                      new_data = amazon_test,
-+                      type = "prob")
-> 
-> final_pen_preds <- tibble(id = amazon_test$id,
-+                           ACTION = pen_preds$.pred_1)
-> 
-> vroom_write(final_pen_preds, "penalized_predictions.csv", delim = ",")
-> 
-> 
-> proc.time()
-   user  system elapsed 
-577.679   2.787 274.669 
