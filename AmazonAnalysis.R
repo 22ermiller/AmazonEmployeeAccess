@@ -6,6 +6,7 @@ library(vroom)
 library(ggmosaic)
 library(doParallel)
 library(discrim) # for naive bayes
+library(themis) # for unbalanced data (smote, upsample, downsample)
 
 ##Read In Data##
 amazon_test <- vroom("test.csv")
@@ -45,6 +46,14 @@ pca_recipe <- recipe(ACTION~., data=amazon_train) %>%
   step_normalize(all_predictors()) %>%
   step_pca(all_predictors(), threshold = .9)
 
+balanced_recipe <- recipe(ACTION~., data=amazon_train) %>%
+  step_mutate_at(all_numeric_predictors(), fn = factor) %>%
+  step_other(all_nominal_predictors(), threshold = .001) %>%
+  step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION)) %>%
+  step_normalize(all_predictors()) %>%
+  step_pca(all_predictors(), threshold = .9) %>%
+  step_smote(all_outcomes(), neighbors = 5)
+
 prep <- prep(pca_recipe)
 baked <- bake(prep, new_data = amazon_train)
 
@@ -55,7 +64,7 @@ log_mod <- logistic_reg() %>% # set logistic regression model
   set_engine("glm")
 
 amazon_workflow <- workflow() %>%
-  add_recipe(my_recipe) %>%
+  add_recipe(balanced_recipe) %>%
   add_model(log_mod) %>%
   fit(data = amazon_train)
 
@@ -76,7 +85,7 @@ pen_mod <- logistic_reg(mixture=tune(),
 
 # set workflow
 pen_workflow <- workflow() %>%
-  add_recipe(my_recipe) %>%
+  add_recipe(balanced_recipe) %>%
   add_model(pen_mod)
 
 ## Grid of tuning values
@@ -122,7 +131,7 @@ forest_mod <- rand_forest(mtry = tune(),
 
 # set workflow
 forest_workflow <- workflow() %>%
-  add_recipe(my_recipe) %>%
+  add_recipe(balanced_recipe) %>%
   add_model(forest_mod)
 
 ## Grid of tuning values
@@ -132,11 +141,6 @@ tuning_grid <- grid_regular(mtry(range = c(1,10)),
 
 # split data into folds
 folds <- vfold_cv(amazon_train, v = 10, repeats = 1)
-
-# Parallel Processing
-num_cores <- parallel::detectCores()
-cl <- makePSOCKcluster(num_cores)
-registerDoParallel(cl)
 
 # run Cross validation
 CV_results <- forest_workflow %>%
@@ -160,8 +164,6 @@ forest_preds <- predict(final_forest_workflow,
 final_forest_preds <- tibble(id = amazon_test$id,
                           ACTION = forest_preds$.pred_1)
 
-stopCluster(cl)
-
 vroom_write(final_forest_preds, "forest_predictions.csv", delim = ",")
 
 
@@ -173,7 +175,7 @@ nb_model <- naive_Bayes(Laplace = tune(),
   set_engine("naivebayes")
 
 nb_workflow <- workflow() %>%
-  add_recipe(pca_recipe) %>%
+  add_recipe(balanced_recipe) %>%
   add_model(nb_model)
 
 ## Tune 
@@ -225,7 +227,7 @@ knn_model <- nearest_neighbor(neighbors = tune()) %>%
   set_engine("kknn")
 
 knn_wf <- workflow() %>%
-  add_recipe(pca_recipe) %>%
+  add_recipe(balanced_recipe) %>%
   add_model(knn_model)
 
 ## Tune 
@@ -279,15 +281,9 @@ svmLinear <- svm_linear(cost = tune()) %>%
   set_mode("classification") %>%
   set_engine("kernlab")
 
-
-# Parallel Processing
-num_cores <- parallel::detectCores()
-cl <- makePSOCKcluster(num_cores)
-registerDoParallel(cl)
-
 svm_workflow <- workflow() %>%
-  add_recipe(pca_recipe) %>%
-  add_model(svmLinear)
+  add_recipe(balanced_recipe) %>%
+  add_model(svmRadial)
 
 ## Tune 
 
@@ -321,6 +317,3 @@ final_svm_preds <- tibble(id = amazon_test$id,
                           ACTION = svm_preds$.pred_1)
 
 vroom_write(final_svm_preds, "svm_predictions.csv", delim = ",")
-
-
-stopCluster(cl)
