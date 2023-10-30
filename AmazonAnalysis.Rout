@@ -44,7 +44,7 @@ Type 'q()' to quit R.
 ✖ dplyr::lag()      masks stats::lag()
 ✖ yardstick::spec() masks readr::spec()
 ✖ recipes::step()   masks stats::step()
-• Learn how to get started at https://www.tidymodels.org/start/
+• Dig deeper into tidy modeling with R at https://www.tmwr.org
 > library(embed)
 > library(vroom)
 
@@ -215,3 +215,316 @@ Warning message:
 +   tune_grid(resamples = folds,
 +             grid = tuning_grid,
 +             metrics = metric_set(roc_auc))
+> 
+> # find best parameters
+> bestTune <- CV_results %>%
++   select_best("roc_auc")
+> 
+> final_pen_workflow <- pen_workflow %>%
++   finalize_workflow(bestTune) %>%
++   fit(data = amazon_train)
+> 
+> # predict
+> pen_preds <- predict(final_pen_workflow,
++                      new_data = amazon_test,
++                      type = "prob")
+> 
+> final_pen_preds <- tibble(id = amazon_test$id,
++                           ACTION = pen_preds$.pred_1)
+> 
+> vroom_write(final_pen_preds, "penalized_predictions.csv", delim = ",")
+> 
+> 
+> # Random Forest -----------------------------------------------------------
+> 
+> forest_mod <- rand_forest(mtry = tune(),
++                           min_n = tune(),
++                           trees = 500) %>%
++   set_engine("ranger") %>%
++   set_mode("classification")
+> 
+> # set workflow
+> forest_workflow <- workflow() %>%
++   add_recipe(balanced_recipe) %>%
++   add_model(forest_mod)
+> 
+> ## Grid of tuning values
+> tuning_grid <- grid_regular(mtry(range = c(1,10)),
++                             min_n(),
++                             levels = 5)
+> 
+> # split data into folds
+> folds <- vfold_cv(amazon_train, v = 10, repeats = 1)
+> 
+> # run Cross validation
+> CV_results <- forest_workflow %>%
++   tune_grid(resamples = folds,
++             grid = tuning_grid,
++             metrics = metric_set(roc_auc))
+→ A | warning: 7 columns were requested but there were 6 predictors in the data. 6 will be used.
+There were issues with some computations   A: x1
+→ B | warning: 10 columns were requested but there were 6 predictors in the data. 6 will be used.
+There were issues with some computations   A: x1There were issues with some computations   A: x1   B: x1
+There were issues with some computations   A: x2   B: x1
+There were issues with some computations   A: x2   B: x2
+There were issues with some computations   A: x3   B: x2
+There were issues with some computations   A: x3   B: x3
+There were issues with some computations   A: x4   B: x3
+There were issues with some computations   A: x4   B: x4
+There were issues with some computations   A: x5   B: x4
+There were issues with some computations   A: x5   B: x5
+There were issues with some computations   A: x6   B: x5
+There were issues with some computations   A: x6   B: x6
+There were issues with some computations   A: x7   B: x6
+There were issues with some computations   A: x7   B: x7
+There were issues with some computations   A: x8   B: x7
+There were issues with some computations   A: x8   B: x8
+There were issues with some computations   A: x9   B: x8
+There were issues with some computations   A: x9   B: x9
+There were issues with some computations   A: x10   B: x9
+There were issues with some computations   A: x10   B: x10
+There were issues with some computations   A: x11   B: x10
+There were issues with some computations   A: x11   B: x11
+There were issues with some computations   A: x12   B: x11
+There were issues with some computations   A: x12   B: x12
+There were issues with some computations   A: x13   B: x12
+There were issues with some computations   A: x13   B: x13
+There were issues with some computations   A: x14   B: x13
+There were issues with some computations   A: x14   B: x14
+There were issues with some computations   A: x15   B: x14
+There were issues with some computations   A: x15   B: x15
+There were issues with some computations   A: x16   B: x15
+There were issues with some computations   A: x16   B: x16
+There were issues with some computations   A: x17   B: x16
+There were issues with some computations   A: x17   B: x17
+There were issues with some computations   A: x18   B: x17
+There were issues with some computations   A: x18   B: x18
+There were issues with some computations   A: x19   B: x18
+There were issues with some computations   A: x19   B: x19
+There were issues with some computations   A: x20   B: x19
+There were issues with some computations   A: x20   B: x20
+There were issues with some computations   A: x21   B: x20
+There were issues with some computations   A: x21   B: x21
+There were issues with some computations   A: x22   B: x21
+There were issues with some computations   A: x22   B: x22
+There were issues with some computations   A: x23   B: x22
+There were issues with some computations   A: x23   B: x23
+There were issues with some computations   A: x24   B: x23
+There were issues with some computations   A: x24   B: x24
+There were issues with some computations   A: x25   B: x24
+There were issues with some computations   A: x25   B: x25
+There were issues with some computations   A: x26   B: x25
+There were issues with some computations   A: x26   B: x26
+There were issues with some computations   A: x27   B: x26
+There were issues with some computations   A: x27   B: x27
+There were issues with some computations   A: x28   B: x27
+There were issues with some computations   A: x28   B: x28
+There were issues with some computations   A: x29   B: x28
+There were issues with some computations   A: x29   B: x29
+There were issues with some computations   A: x30   B: x29
+There were issues with some computations   A: x30   B: x30
+There were issues with some computations   A: x31   B: x30
+There were issues with some computations   A: x31   B: x31
+There were issues with some computations   A: x32   B: x31
+There were issues with some computations   A: x32   B: x32
+There were issues with some computations   A: x33   B: x32
+There were issues with some computations   A: x33   B: x33
+There were issues with some computations   A: x34   B: x33
+There were issues with some computations   A: x34   B: x34
+There were issues with some computations   A: x35   B: x34
+There were issues with some computations   A: x35   B: x35
+There were issues with some computations   A: x36   B: x35
+There were issues with some computations   A: x36   B: x36
+There were issues with some computations   A: x37   B: x36
+There were issues with some computations   A: x37   B: x37
+There were issues with some computations   A: x38   B: x37
+There were issues with some computations   A: x38   B: x38
+There were issues with some computations   A: x39   B: x38
+There were issues with some computations   A: x39   B: x39
+There were issues with some computations   A: x40   B: x39
+There were issues with some computations   A: x40   B: x40
+There were issues with some computations   A: x41   B: x40
+There were issues with some computations   A: x41   B: x41
+There were issues with some computations   A: x42   B: x41
+There were issues with some computations   A: x42   B: x42
+There were issues with some computations   A: x43   B: x42
+There were issues with some computations   A: x43   B: x43
+There were issues with some computations   A: x44   B: x43
+There were issues with some computations   A: x44   B: x44
+There were issues with some computations   A: x45   B: x44
+There were issues with some computations   A: x45   B: x45
+There were issues with some computations   A: x46   B: x45
+There were issues with some computations   A: x46   B: x46
+There were issues with some computations   A: x47   B: x46
+There were issues with some computations   A: x47   B: x47
+There were issues with some computations   A: x48   B: x47
+There were issues with some computations   A: x48   B: x48
+There were issues with some computations   A: x49   B: x48
+There were issues with some computations   A: x49   B: x49
+There were issues with some computations   A: x50   B: x49
+There were issues with some computations   A: x50   B: x50
+There were issues with some computations   A: x50   B: x50
+
+> 
+> # find best parameters
+> bestTune <- CV_results %>%
++   select_best("roc_auc")
+> 
+> final_forest_workflow <- forest_workflow %>%
++   finalize_workflow(bestTune) %>%
++   fit(data = amazon_train)
+> 
+> # predict
+> forest_preds <- predict(final_forest_workflow,
++                      new_data = amazon_test,
++                      type = "prob")
+> 
+> final_forest_preds <- tibble(id = amazon_test$id,
++                           ACTION = forest_preds$.pred_1)
+> 
+> vroom_write(final_forest_preds, "forest_predictions.csv", delim = ",")
+> 
+> 
+> # Naive Bayes -------------------------------------------------------------
+> 
+> nb_model <- naive_Bayes(Laplace = tune(), 
++                         smoothness = tune()) %>%
++   set_mode("classification") %>%
++   set_engine("naivebayes")
+> 
+> nb_workflow <- workflow() %>%
++   add_recipe(balanced_recipe) %>%
++   add_model(nb_model)
+> 
+> ## Tune 
+> 
+> ## Grid of tuning values
+> tuning_grid <- grid_regular(Laplace(),
++                             smoothness(),
++                             levels = 5)
+> 
+> # split data into folds
+> folds <- vfold_cv(amazon_train, v = 10, repeats = 1)
+> 
+> # run Cross validation
+> CV_results <- nb_workflow %>%
++   tune_grid(resamples = folds,
++             grid = tuning_grid,
++             metrics = metric_set(roc_auc))
+> 
+> # find best parameters
+> bestTune <- CV_results %>%
++   select_best("roc_auc")
+> 
+> final_nb_workflow <- nb_workflow %>%
++   finalize_workflow(bestTune) %>%
++   fit(data = amazon_train)
+> 
+> # predict
+> nb_preds <- predict(final_nb_workflow,
++                         new_data = amazon_test,
++                         type = "prob")
+> 
+> final_nb_preds <- tibble(id = amazon_test$id,
++                              ACTION = nb_preds$.pred_1)
+> 
+> vroom_write(final_nb_preds, "nb_predictions.csv", delim = ",")
+> 
+> 
+> 
+> # K-Nearest Neighbors -----------------------------------------------------
+> 
+> knn_recipe <- recipe(ACTION~., data=amazon_train) %>%
++   step_mutate_at(all_numeric_predictors(), fn = factor) %>%
++   step_other(all_nominal_predictors(), threshold = .001) %>%
++   step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION)) %>%
++   step_normalize(all_numeric_predictors())
+> 
+> knn_model <- nearest_neighbor(neighbors = tune()) %>%
++   set_mode("classification") %>%
++   set_engine("kknn")
+> 
+> knn_wf <- workflow() %>%
++   add_recipe(balanced_recipe) %>%
++   add_model(knn_model)
+> 
+> ## Tune 
+> 
+> ## Grid of tuning values
+> tuning_grid <- grid_regular(neighbors(),
++                             levels = 5)
+> 
+> # split data into folds
+> folds <- vfold_cv(amazon_train, v = 10, repeats = 1)
+> 
+> # run Cross validation
+> CV_results <- knn_wf %>%
++   tune_grid(resamples = folds,
++             grid = tuning_grid,
++             metrics = metric_set(roc_auc))
+> 
+> # find best parameters
+> bestTune <- CV_results %>%
++   select_best("roc_auc")
+> 
+> final_knn_workflow <- knn_wf %>%
++   finalize_workflow(bestTune) %>%
++   fit(data = amazon_train)
+> 
+> # predict
+> knn_preds <- predict(final_knn_workflow,
++                     new_data = amazon_test,
++                     type = "prob")
+> 
+> final_knn_preds <- tibble(id = amazon_test$id,
++                          ACTION = knn_preds$.pred_1)
+> 
+> vroom_write(final_knn_preds, "knn_predictions.csv", delim = ",")
+> 
+> 
+> # Support Vector Machines -------------------------------------------------
+> 
+> # Polynomial SVM
+> svmPoly <- svm_poly(degree=tune(), cost=tune()) %>%
++   set_mode("classification") %>%
++   set_engine("kernlab")
+> 
+> # Radial SVM
+> svmRadial <- svm_rbf(rbf_sigma = tune(), cost = tune()) %>%
++   set_mode("classification") %>%
++   set_engine("kernlab")
+> 
+> # Linear SVM
+> svmLinear <- svm_linear(cost = tune()) %>%
++   set_mode("classification") %>%
++   set_engine("kernlab")
+> 
+> svm_workflow <- workflow() %>%
++   add_recipe(balanced_recipe) %>%
++   add_model(svmRadial)
+> 
+> ## Tune 
+> 
+> ## Grid of tuning values
+> tuning_grid <- grid_regular(cost(),
++                             levels = 5)
+> 
+> # split data into folds
+> folds <- vfold_cv(amazon_train, v = 10, repeats = 1)
+> 
+> # run Cross validation
+> CV_results <- svm_workflow %>%
++   tune_grid(resamples = folds,
++             grid = tuning_grid,
++             metrics = metric_set(roc_auc))
+Error in `check_grid()`:
+! The provided `grid` is missing the following parameter columns that have been marked for tuning by `tune()`: 'rbf_sigma'.
+Backtrace:
+    ▆
+ 1. ├─svm_workflow %>% ...
+ 2. ├─tune::tune_grid(., resamples = folds, grid = tuning_grid, metrics = metric_set(roc_auc))
+ 3. └─tune:::tune_grid.workflow(...)
+ 4.   └─tune:::tune_grid_workflow(...)
+ 5.     └─tune:::check_grid(grid = grid, workflow = workflow, pset = pset)
+ 6.       └─rlang::abort(msg)
+Execution halted
