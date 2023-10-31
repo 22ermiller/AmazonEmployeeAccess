@@ -16,8 +16,6 @@ amazon_train <- vroom("train.csv")  %>%
 balanced_recipe <- recipe(ACTION~., data=amazon_train) %>%
   step_mutate_at(all_numeric_predictors(), fn = factor) %>%
   step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION)) %>%
-  step_normalize(all_predictors()) %>%
-  step_pca(all_predictors(), threshold = .9) %>%
   step_smote(all_outcomes(), neighbors = 5)
 
 # Random Forest -----------------------------------------------------------
