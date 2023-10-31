@@ -15,21 +15,28 @@ amazon_train <- vroom("train.csv")  %>%
 
 balanced_recipe <- recipe(ACTION~., data=amazon_train) %>%
   step_mutate_at(all_numeric_predictors(), fn = factor) %>%
-  step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION)) %>%
-  step_smote(all_outcomes(), neighbors = 5)
+  step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION)) #%>%
+  # step_normalize(all_predictors()) %>%
+  # step_pca(all_predictors(), threshold = .99) %>%
+  # step_smote(all_outcomes(), neighbors = 5)
+
+prep <- prep(balanced_recipe)
+baked <- bake(prep, new_data = amazon_train)
+
 
 # Random Forest -----------------------------------------------------------
 
-forest_mod <- rand_forest(mtry = tune(),
-                          min_n = tune(),
-                          trees = 500) %>%
+forest_mod <- rand_forest(mtry = 1,
+                          min_n = 15,
+                          trees = 1000) %>%
   set_engine("ranger") %>%
   set_mode("classification")
 
 # set workflow
 forest_workflow <- workflow() %>%
   add_recipe(balanced_recipe) %>%
-  add_model(forest_mod)
+  add_model(forest_mod) %>%
+  fit(data = amazon_train)
 
 ## Grid of tuning values
 tuning_grid <- grid_regular(mtry(range = c(1,10)),
@@ -54,7 +61,7 @@ final_forest_workflow <- forest_workflow %>%
   fit(data = amazon_train)
 
 # predict
-forest_preds <- predict(final_forest_workflow,
+forest_preds <- predict(forest_workflow,
                         new_data = amazon_test,
                         type = "prob")
 
